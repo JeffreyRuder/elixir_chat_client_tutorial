@@ -6,22 +6,40 @@ defmodule Chat do
     case :gen_tcp.connect(String.to_charlist(host), port, options) do
       {:ok, socket} ->
         IO.puts("Connection successful")
-        listen(socket)
+        nickname = String.trim(IO.gets("Nickname: "))
+
+        spawn_user_input_process(nickname)
+
+        listen(socket, nickname)
 
       {:error, reason} ->
         raise "Failed to open connection: #{inspect(reason)}"
     end
   end
 
-  defp listen(socket) do
+  defp spawn_user_input_process(nickname) do
+    parent = self()
+
+    spawn(fn ->
+      message = String.trim(IO.gets("#{nickname}: "))
+      send(parent, {:gets, message})
+    end)
+  end
+
+  defp listen(socket, nickname) do
     receive do
+      {:gets, message} ->
+        IO.puts("#{nickname}: #{message}")
+        spawn_user_input_process(nickname)
+        listen(socket, nickname)
+
       {:tcp, ^socket, data} ->
         data
         |> Jason.decode!()
         |> IO.inspect()
         |> handle_message()
 
-        listen(socket)
+        listen(socket, nickname)
 
       {:tcp_closed, ^socket} ->
         raise "TCP connection was closed"
