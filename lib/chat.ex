@@ -22,22 +22,22 @@ defmodule Chat do
 
     spawn(fn ->
       message = String.trim(IO.gets("#{nickname}: "))
-      send(parent, {:gets, message})
+      send(parent, {:user_input, message})
     end)
   end
 
   defp listen(socket, nickname) do
     receive do
-      {:gets, message} ->
-        IO.puts("#{nickname}: #{message}")
+      {:user_input, message} ->
+        payload = %{"kind" => "broadcast", "nickname" => nickname, "message" => message}
+        :ok = :gen_tcp.send(socket, Jason.encode!(payload))
         spawn_user_input_process(nickname)
         listen(socket, nickname)
 
       {:tcp, ^socket, data} ->
         data
         |> Jason.decode!()
-        |> IO.inspect()
-        |> handle_message()
+        |> handle_message(nickname)
 
         listen(socket, nickname)
 
@@ -49,7 +49,7 @@ defmodule Chat do
     end
   end
 
-  defp handle_message(%{"kind" => "welcome"} = map) do
+  defp handle_message(%{"kind" => "welcome"} = map, _nickname) do
     IO.puts("Welcome to the ElixirConf server")
     users_online = map["users_online"]
 
@@ -65,7 +65,22 @@ defmodule Chat do
     end
   end
 
-  defp handle_message(unknown_message) do
+  defp handle_message(
+         %{"kind" => "broadcast", "message" => _message, "nickname" => nickname},
+         nickname
+       ) do
+    # user sent this message
+    :ok
+  end
+
+  defp handle_message(
+         %{"kind" => "broadcast", "message" => message, "nickname" => nickname},
+         _nickname
+       ) do
+    IO.puts("#{nickname}: #{message}")
+  end
+
+  defp handle_message(unknown_message, _nickname) do
     IO.puts("Received unknown message: #{inspect(unknown_message)}")
   end
 
